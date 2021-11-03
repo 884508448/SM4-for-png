@@ -1,6 +1,7 @@
 #include "utils.h"
 #include <fstream>
 using namespace std;
+// #define DEBUG
 
 void get_err_para(){
     printf("It seems that you have entered the wrong parameters\n");
@@ -44,6 +45,16 @@ void en_de_cryption(const char* E_D,const char* mode,const char* sou,const char*
 }
 
 int main(int argc,char* argv[]){
+    #ifdef DEBUG
+    // en_de_cryption("-E","-e","C:/VSWS/SM4/pict/stars.png","C:/VSWS/SM4/pict/stars_en.png");
+    // en_de_cryption("-D","-e","C:/VSWS/SM4/pict/stars_en.png","C:/VSWS/SM4/pict/stars_de.png");
+    en_de_cryption("-E","-e","C:/VSWS/SM4/pict/cartoon_girl.png","C:/VSWS/SM4/pict/cartoon_girl_en.png");
+    en_de_cryption("-D","-e","C:/VSWS/SM4/pict/cartoon_girl_en.png","C:/VSWS/SM4/pict/cartoon_girl_de.png");
+    system("pause");
+    return 0;
+    #endif
+
+
     uint32_t key[]={0x01234567,0x89abcdef,0xfedcba98,0x76543210};
     uint32_t IV[]={0x01234567,0x89abcdef,0xfedcba98,0x76543210};
     Set_key(key);
@@ -57,7 +68,7 @@ int main(int argc,char* argv[]){
         help();
         return 0;
     }
-    if(argc==5&&(strcmp(argv[1],"-E")==0||strcmp(argv[1],"-D")==0||strcmp(argv[2],"-e")==0||strcmp(argv[2],"-c")==0)){
+    if(argc==5&&(strcmp(argv[1],"-E")==0||strcmp(argv[1],"-D")==0&&strcmp(argv[2],"-e")==0||strcmp(argv[2],"-c")==0)){
         en_de_cryption(argv[1],argv[2],argv[3],argv[4]);
         return 0;
     }

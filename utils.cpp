@@ -3,7 +3,8 @@
 
 // #define DEBUG
 
-void zero_fill(byte* &raw,uint32_t& len){   // Fill with 0 so that the original data length is a multiple of 16
+// Fill with 0 so that the original data length is a multiple of 16
+void zero_fill(byte* &raw,uint32_t& len){
     int need=16-(len%16);
     if (need!=16){
         byte* data=new byte[len+need];
@@ -19,8 +20,7 @@ void zero_fill(byte* &raw,uint32_t& len){   // Fill with 0 so that the original 
     }
 }
 
-void vec2arr(vector<byte>& vec,byte*& arr){
-    arr=new byte[vec.size()];
+void vec2arr(vector<byte>& vec,byte* arr){
     for(int i=0;i<vec.size();i++){
         arr[i]=vec[i];
     }
@@ -33,9 +33,22 @@ void arr2vec(vector<byte>& vec,byte*& arr,uint32_t size){
     }
 }
 
-void append_len(const char* file_name,uint32_t len){
+// Append the extra bytes and length
+void append_extra(const char* file_name,uint32_t len,byte* extra){
     FILE* image=fopen(file_name,"ab");
+    fwrite(extra,1,len,image);
     fwrite(&len,4,1,image);
+    fclose(image);
+}
+
+// Get the extra bytes and length
+void get_extra(const char* file_name,uint32_t& len,byte* &extra){
+    FILE* image=fopen(file_name,"rb");
+    fseek(image,-4,SEEK_END);
+    fread(&len,4,1,image);
+    fseek(image,-(4+len),SEEK_END);
+    extra=new byte[len];
+    fread(extra,1,len,image);
     fclose(image);
 }
 
@@ -70,9 +83,11 @@ void write_png(const char* out_name, vector<byte>& image, uint32_t& w, uint32_t&
     lodepng::save_file(buffer, out_name);
 }
 
+
 /************************************************************************************************
  * ECB model BEGIN
  * **********************************************************************************************/
+
 byte* ecb_encrypt(byte* &data,uint32_t& len){
     zero_fill(data,len);
     assert(len%16==0);
@@ -108,6 +123,7 @@ byte* ecb_decrypt(const byte* code,uint32_t len){
 /************************************************************************************************
  * CBC model BEGIN
  * **********************************************************************************************/
+
 byte* cbc_encrypt(byte* &data,uint32_t& len){
     zero_fill(data,len);
     assert(len%16==0);
@@ -167,6 +183,7 @@ byte* cbc_decrypt(const byte* code,uint32_t len){
 /************************************************************************************************
  * png operation BEGIN
  * **********************************************************************************************/
+
 void enc_pict(const char* file_name,const char* out_name, bool ECB, bool CBC){
     // read png
     vector<byte> image;
@@ -176,27 +193,28 @@ void enc_pict(const char* file_name,const char* out_name, bool ECB, bool CBC){
 
     //encode png
     uint32_t origin_len=image.size();
-    uint32_t len=origin_len;
-    byte* image_arr;
+    uint32_t en_len=origin_len;
+    byte* image_arr=new byte[origin_len];
     vec2arr(image,image_arr);
-    if(ECB) image_arr=ecb_encrypt(image_arr,len);
-    else if(CBC) image_arr=cbc_encrypt(image_arr,len);
+    if(ECB) image_arr=ecb_encrypt(image_arr,en_len);
+    else if(CBC) image_arr=cbc_encrypt(image_arr,en_len);
     else{
         printf("ERROR: Please check ECB or CBC model!\n");
         return;
     }
-    arr2vec(image,image_arr,len);
+    arr2vec(image,image_arr,origin_len);
 
     // write png
     write_png(out_name,image,w,h,state);
 
-    // append origin len
-    append_len(out_name,origin_len);
+    // append the extra bytes and length
+    uint32_t extra_len=en_len-origin_len;
+    append_extra(out_name,extra_len,image_arr+origin_len);
 
     #ifdef DEBUG
     printf("w:%d, h:%d\n",w,h);
-    printf("origin_len: %d\nlen: %d\n",origin_len,len);
-    printf("fill zero: %d\n",len-origin_len);
+    printf("origin_len: %d\nen_len: %d\n",origin_len,en_len);
+    printf("fill zero: %d\n",extra_len);
     #endif
 }
 
@@ -205,18 +223,26 @@ void dec_pict(const char* file_name,const char* out_name, bool ECB, bool CBC){
     vector<byte> image;
     uint32_t w,h;
     lodepng::State state;
+    
     read_png(file_name,image,w,h,state);
 
-    //decode png
-    uint32_t len=image.size();
-    byte* image_arr;
+    // get extra bytes and length
+    byte* extra;
+    uint32_t extra_len;
+    get_extra(file_name,extra_len,extra);
+
+    // decode png
+    uint32_t len=image.size();  // Calculated from the length and width
+    byte* image_arr=new byte[len+extra_len];
     vec2arr(image,image_arr);
-    if(ECB) image_arr=ecb_decrypt(image_arr,len);
-    else if(CBC) image_arr=cbc_decrypt(image_arr,len);
+    memcpy(image_arr+len,extra,extra_len);  // Append the extra bytes
+    if(ECB) image_arr=ecb_decrypt(image_arr,len+extra_len);
+    else if(CBC) image_arr=cbc_decrypt(image_arr,len+extra_len);
     else{
         printf("ERROR: Please check ECB or CBC model!\n");
         return;
     }
+    // use real length, ignore the filled zeros
     arr2vec(image,image_arr,len);
 
     // write png
